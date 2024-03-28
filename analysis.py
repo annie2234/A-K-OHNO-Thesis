@@ -58,6 +58,8 @@ def read_data(rate_df, methane_value, filename):
     # UNIT CONVERSION: molecules cm-3
     # generating a list of all gas species
     list_gas = list(df2.columns)
+    
+    df2 = df2.multiply(1.0e-12)
  
     for i in range(len(list_gas)): 
         gas = list_gas[i]
@@ -358,6 +360,7 @@ def average(df, time_period, format_type):
             # calculating the mean grouped by the rate type, month and temperature
                 # as_index=False so that each grouping has a separate column
             df = df.groupby(['rate type','month','Temperature'],as_index=False).mean()
+            df['sem'] = df['OH concentration'].sem()
         
         # daily average
         if time_period == 'day':
@@ -379,31 +382,40 @@ def average(df, time_period, format_type):
 
     # CONTINOUS
     if format_type == 'continuous':
+        # monthly average
         if time_period == 'month':
             monthly_avg_list = []
-
+            
+            # looping over each rate type
             for i in range(len(rate_type_list)):
                 rate_type = rate_type_list[i]
+                # accessing rate df
                 rate_df = df[df['rate type'] == rate_type]
-#                 rate_df = rate_df.set_index('Date_Time')
+                #finding monthly average
                 monthly_avg = rate_df.resample('M').mean(numeric_only=True)
                 monthly_avg['rate type'] = [rate_type]*len(monthly_avg)
 
                 monthly_avg_list.append(monthly_avg)
-
+            # converting to a dataframe
             df = pd.concat(monthly_avg_list)
+            # calculating the standard error of the mean for plotting
+            df['sem'] = df['OH concentration'].sem()
 
+        # daily average
         if time_period == 'day':
             daily_avg_list = []
-
+            
+            # looping over each rate type
             for i in range(len(rate_type_list)):
                 rate_type = rate_type_list[i]
+                # accessing rate df
                 rate_df = df[df['rate type'] == rate_type]
+                # finding the daily average
                 daily_avg = rate_df.resample('d').mean(numeric_only=True)
                 daily_avg['rate type'] = [rate_type]*len(daily_avg)
 
                 daily_avg_list.append(daily_avg)
-
+            # converting to a dataframe
             df = pd.concat(daily_avg_list)
     
     df = df.reset_index()
@@ -550,6 +562,7 @@ def calculate_OH_percentage_mean(df):
     # empty lists to contain values
     OH_mean_list = []
     OH_perc_mean_list = []
+    OH_perc_mean_sem_list = []
     temp_list = []
     df_rate_list = []
     
@@ -568,15 +581,18 @@ def calculate_OH_percentage_mean(df):
             OH_mean = temp_df['OH concentration'].mean()
             #calculating mean % change from literature at temperature
             OH_perc_mean = temp_df['OH percentage change'].mean()
+            # calculating SEM
+            OH_perc_mean_sem = temp_df['OH percentage change'].sem()
             
             # appending final values to corresponding list
             OH_mean_list.append(OH_mean)
             OH_perc_mean_list.append(OH_perc_mean)
+            OH_perc_mean_sem_list.append(OH_perc_mean_sem)
             temp_list.append(i)
             df_rate_list.append(rate)
     
     #creating final dataframe
-    df_perc_mean = pd.DataFrame({'rate type':df_rate_list, 'temperature': temp_list, '% change in OH mean':OH_perc_mean_list, 'mean OH': OH_mean_list})
+    df_perc_mean = pd.DataFrame({'rate type':df_rate_list, 'temperature': temp_list, '% change in OH mean':OH_perc_mean_list, 'mean OH': OH_mean_list, 'OH perc sem':OH_perc_mean_sem_list})
     
     return df_perc_mean
 
@@ -736,7 +752,7 @@ def collapse_means(df_lit, df_collapse, df_pre_collapse, df_post_collapse):
         - df_post_collapse: dataframe containing the data associated with points after collapse
         
     Returns:
-        - dataframe containing the mean NO, NO2, NMVOC sum and O3 for before, during, after a collapse and annually.
+        - dataframe containing the mean NO, NO2, NMVOC sum and O3 for before, during, after a collapse and annually. In addition to the standard error of each of the means (sem).
     '''
     
     # selecting the required columns
@@ -744,24 +760,33 @@ def collapse_means(df_lit, df_collapse, df_pre_collapse, df_post_collapse):
     post_collapse = df_post_collapse[['Nitric oxide','NMVOC sum','Nitrogen dioxide','Ozone']]
     collapse = df_collapse[['Nitric oxide','NMVOC sum','Nitrogen dioxide','Ozone']]
     df_lit = df_lit[['Nitric oxide','NMVOC sum','Nitrogen dioxide','Ozone']]
-    
-    # calculating stats
-    pre_stats = pre_collapse.describe()
-    post_stats = post_collapse.describe()
-    col_stats = collapse.describe()
-    lit_stats = df_lit.describe()
+   
     # accessing mean value
-    df_pre_stats = (pd.DataFrame(pre_stats.iloc[1])).reset_index()
-    df_post_stats = (pd.DataFrame(post_stats.iloc[1])).reset_index()
-    df_col_stats = (pd.DataFrame(col_stats.iloc[1])).reset_index()
-    df_lit_stats = (pd.DataFrame(lit_stats.iloc[1])).reset_index()
+    df_pre_mean = (pd.DataFrame(pre_collapse.mean())).reset_index()
+    df_pre_mean.rename(columns={0:'mean'}, inplace=True)
+    df_post_mean = (pd.DataFrame(post_collapse.mean())).reset_index()
+    df_post_mean.rename(columns={0:'mean'}, inplace=True)
+    df_col_mean = (pd.DataFrame(collapse.mean())).reset_index()
+    df_col_mean.rename(columns={0:'mean'}, inplace=True)
+    df_lit_mean = (pd.DataFrame(df_lit.mean())).reset_index()
+    df_lit_mean.rename(columns={0:'mean'}, inplace=True)
+    
+    # adding the standard error of the mean
+    pre_sem = list(pre_collapse.sem())
+    post_sem = list(post_collapse.sem())
+    col_sem = list(collapse.sem())
+    lit_sem = list(df_lit.sem())
+    df_pre_mean['sem'] = pre_sem
+    df_post_mean['sem'] = post_sem
+    df_col_mean['sem'] = col_sem
+    df_lit_mean['sem'] = lit_sem
     # adding a descriptor
-    df_pre_stats['Statistic Type'] = 'Before'
-    df_post_stats['Statistic Type'] = 'After'
-    df_col_stats['Statistic Type'] = 'Collapse'
-    df_lit_stats['Statistic Type'] = 'Annual'
+    df_pre_mean['Statistic Type'] = 'Before'
+    df_post_mean['Statistic Type'] = 'After'
+    df_col_mean['Statistic Type'] = 'Collapse'
+    df_lit_mean['Statistic Type'] = 'Annual'
     # creating a final dataframe
-    complete_stats = pd.concat([df_pre_stats, df_col_stats, df_post_stats, df_lit_stats])
+    complete_stats = pd.concat([df_pre_mean, df_col_mean, df_post_mean, df_lit_mean])
     
     return complete_stats
 
