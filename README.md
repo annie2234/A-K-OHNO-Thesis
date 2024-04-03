@@ -15,7 +15,7 @@ Outputs a .feather file for each temperature, rate constant type and is organise
 **The Analysis Notebook**
 Carries out all data analysis and graph production seen in the thesis.
 
-**Please note:** Please leave the previously generated folders and filenames as produced and in the working directory otherwise the code won't run.
+**Please note:** Please leave the previously generated folders and filenames as produced and in the working directory to allow the code to run correctly.
 
 **The Temperature Dependant Rate Constant EXCEL Spreadsheet**
 Contains all the temperature dependant rate constant calculations for the OH-NO reaction, including the literature and unpublished parameters. The 'Final data' sheet is read into the Jupyter Notebooks. The analysis of the NIST experimental and review OH-NO rate constants is also contained in a separate sheet.
